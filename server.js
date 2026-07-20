@@ -6,7 +6,9 @@ const { spawn } = require('child_process');
 
 const PORT = process.env.PORT || 3000;
 const MAX_BODY_SIZE = 10 * 1024;
+const MAX_LOG_SIZE = 50 * 1024;
 const DOWNLOADS_DIRECTORY = path.join(os.homedir(), 'Downloads');
+let isDownloading = false;
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -36,14 +38,31 @@ function parseDownloadUrl(value) {
   return parsedUrl.toString();
 }
 
+function appendLog(currentLog, data) {
+  const updatedLog = currentLog + data.toString();
+  return updatedLog.length > MAX_LOG_SIZE
+    ? updatedLog.slice(-MAX_LOG_SIZE)
+    : updatedLog;
+}
+
 function downloadSite(url, onComplete) {
-  fs.mkdirSync(DOWNLOADS_DIRECTORY, { recursive: true });
   let finished = false;
 
   function finish(result) {
     if (finished) return;
     finished = true;
     onComplete(result);
+  }
+
+  try {
+    fs.mkdirSync(DOWNLOADS_DIRECTORY, { recursive: true });
+  } catch {
+    finish({
+      success: false,
+      statusCode: 500,
+      message: 'Não foi possível acessar a pasta Downloads do sistema.',
+    });
+    return;
   }
 
   const wget = spawn('wget', [
@@ -59,8 +78,8 @@ function downloadSite(url, onComplete) {
   ]);
 
   let logOutput = '';
-  wget.stdout.on('data', (data) => { logOutput += data.toString(); });
-  wget.stderr.on('data', (data) => { logOutput += data.toString(); });
+  wget.stdout.on('data', (data) => { logOutput = appendLog(logOutput, data); });
+  wget.stderr.on('data', (data) => { logOutput = appendLog(logOutput, data); });
 
   wget.on('error', (error) => {
     const message = error.code === 'ENOENT'
@@ -120,7 +139,14 @@ const server = http.createServer((req, res) => {
       const { url } = JSON.parse(body);
       const validatedUrl = parseDownloadUrl(url);
 
+      if (isDownloading) {
+        sendJson(res, 409, { success: false, message: 'Já existe um download em andamento.' });
+        return;
+      }
+
+      isDownloading = true;
       downloadSite(validatedUrl, (result) => {
+        isDownloading = false;
         sendJson(res, result.statusCode, result);
       });
     } catch {
