@@ -52,6 +52,7 @@ function downloadSite(url, onComplete) {
     '--adjust-extension',
     '--page-requisites',
     '--no-parent',
+    '--no-check-certificate',
     `--directory-prefix=${DOWNLOADS_DIRECTORY}`,
     '--',
     url,
@@ -113,6 +114,8 @@ const server = http.createServer((req, res) => {
   });
 
   req.on('end', () => {
+    if (req.destroyed) return;
+
     try {
       const { url } = JSON.parse(body);
       const validatedUrl = parseDownloadUrl(url);
