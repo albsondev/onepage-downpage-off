@@ -4,11 +4,20 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const PORT = process.env.PORT || 3000;
 const MAX_BODY_SIZE = 10 * 1024;
 const MAX_LOG_SIZE = 50 * 1024;
 const DOWNLOADS_DIRECTORY = path.join(os.homedir(), 'Downloads');
 let isDownloading = false;
+
+function parsePort(value) {
+  const port = Number(value);
+
+  return Number.isInteger(port) && port >= 1 && port <= 65535
+    ? port
+    : 3000;
+}
+
+const PORT = parsePort(process.env.PORT);
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -45,6 +54,15 @@ function appendLog(currentLog, data) {
     : updatedLog;
 }
 
+async function ensureDownloadsDirectory() {
+  try {
+    await fs.promises.mkdir(DOWNLOADS_DIRECTORY, { recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function downloadSite(url, onComplete) {
   let finished = false;
 
@@ -54,53 +72,61 @@ function downloadSite(url, onComplete) {
     onComplete(result);
   }
 
-  try {
-    fs.mkdirSync(DOWNLOADS_DIRECTORY, { recursive: true });
-  } catch {
-    finish({
-      success: false,
-      statusCode: 500,
-      message: 'Não foi possível acessar a pasta Downloads do sistema.',
+  ensureDownloadsDirectory()
+    .then((isDirectoryReady) => {
+      if (!isDirectoryReady) {
+        finish({
+          success: false,
+          statusCode: 500,
+          message: 'Não foi possível acessar a pasta Downloads do sistema.',
+        });
+        return;
+      }
+
+      const wget = spawn('wget', [
+        '--mirror',
+        '--convert-links',
+        '--adjust-extension',
+        '--page-requisites',
+        '--no-parent',
+        '--no-check-certificate',
+        `--directory-prefix=${DOWNLOADS_DIRECTORY}`,
+        '--',
+        url,
+      ]);
+
+      let logOutput = '';
+      wget.stdout.on('data', (data) => { logOutput = appendLog(logOutput, data); });
+      wget.stderr.on('data', (data) => { logOutput = appendLog(logOutput, data); });
+
+      wget.on('error', (error) => {
+        const message = error.code === 'ENOENT'
+          ? 'O comando wget não está instalado neste computador.'
+          : 'Não foi possível iniciar o wget.';
+        finish({ success: false, statusCode: 500, message });
+      });
+
+      wget.on('close', (code) => {
+        if (code === 0) {
+          finish({ success: true, statusCode: 200, message: 'Site baixado com sucesso!' });
+          return;
+        }
+
+        finish({
+          success: false,
+          statusCode: 500,
+          message: `Erro ao baixar (código ${code}).`,
+          log: logOutput,
+        });
+      });
+    })
+    .catch(() => {
+      finish({
+        success: false,
+        statusCode: 500,
+        message: 'Não foi possível preparar o download.',
+      });
     });
-    return;
-  }
-
-  const wget = spawn('wget', [
-    '--mirror',
-    '--convert-links',
-    '--adjust-extension',
-    '--page-requisites',
-    '--no-parent',
-    '--no-check-certificate',
-    `--directory-prefix=${DOWNLOADS_DIRECTORY}`,
-    '--',
-    url,
-  ]);
-
-  let logOutput = '';
-  wget.stdout.on('data', (data) => { logOutput = appendLog(logOutput, data); });
-  wget.stderr.on('data', (data) => { logOutput = appendLog(logOutput, data); });
-
-  wget.on('error', (error) => {
-    const message = error.code === 'ENOENT'
-      ? 'O comando wget não está instalado neste computador.'
-      : 'Não foi possível iniciar o wget.';
-    finish({ success: false, statusCode: 500, message });
-  });
-
-  wget.on('close', (code) => {
-    if (code === 0) {
-      finish({ success: true, statusCode: 200, message: 'Site baixado com sucesso!' });
-      return;
-    }
-
-    finish({
-      success: false,
-      statusCode: 500,
-      message: `Erro ao baixar (código ${code}).`,
-      log: logOutput,
-    });
-  });
 }
 
 const server = http.createServer((req, res) => {
