@@ -13,7 +13,7 @@ Interface local para espelhar sites com `wget`.
 node server.js
 ```
 
-Abra `http://localhost:3000` no navegador. Os arquivos baixados são armazenados em `downloads/`, que não é versionado.
+Abra `http://localhost:3000` no navegador. Os arquivos baixados são armazenados na pasta padrão de Downloads do usuário do sistema (`~/Downloads`).
 
 ## Observações
 

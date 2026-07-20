@@ -1,11 +1,12 @@
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 
 const PORT = process.env.PORT || 3000;
 const MAX_BODY_SIZE = 10 * 1024;
-const DOWNLOADS_DIRECTORY = path.join(__dirname, 'downloads');
+const DOWNLOADS_DIRECTORY = path.join(os.homedir(), 'Downloads');
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
