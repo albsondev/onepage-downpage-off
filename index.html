@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Downloader de Sites</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div class="card">
+    <h1>Web Scraper Local</h1>
+    <p class="subtitle">Copie a estrutura completa de um site via Wget</p>
+
+    <form id="downloadForm" class="form-group">
+      <input type="url" id="urlInput" placeholder="https://exemplo.com" required>
+      <button type="submit" id="submitBtn">
+        <span>Baixar Site</span>
+      </button>
+    </form>
+
+    <div id="statusBox" class="status"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('downloadForm');
+    const urlInput = document.getElementById('urlInput');
+    const btn = document.getElementById('submitBtn');
+    const statusBox = document.getElementById('statusBox');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = urlInput.value.trim();
+
+      if (!url) return;
+
+      btn.disabled = true;
+      statusBox.className = 'status loading';
+      statusBox.innerHTML = '<div class="spinner"></div> Baixando o site... Isso pode levar alguns minutos dependendo do tamanho.';
+
+      try {
+        const res = await fetch('/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          statusBox.className = 'status success';
+          statusBox.textContent = '✅ ' + data.message + ' O conteúdo foi salvo no diretório do servidor.';
+        } else {
+          statusBox.className = 'status error';
+          statusBox.textContent = '❌ ' + data.message;
+        }
+      } catch (err) {
+        statusBox.className = 'status error';
+        statusBox.textContent = '❌ Erro de conexão com o servidor local.';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  </script>
+
+</body>
+</html>
